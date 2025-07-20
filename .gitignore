@@ -1,3 +1,7 @@
+.secrets/
+
+# Github "Python.gitignore" template:
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
