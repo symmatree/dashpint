@@ -20,17 +20,28 @@ tool that compares queries against a Prometheus (or Mimir) server and looks for 
 positive, especially on "missing labels" that would only appear when a failure occurs, but it has fewer
 false negatives than other tools.
 
+## Status
+
+Working, no CI or testing.
+
+Needs a better strategy for filling in a missing `namespace` var since that
+helps a lot with reducing false positives. Right now I just run manually by
+folder, and change the replacement value between runs.
+
 ## Basic operations
 
-### Extract queries
-
-The first step is to run `extract.py`:
+Basically, run extract.py to dig out expressions (with plausible replacements for
+dashboard variables) and make pretend Recording Rules out of them, and then run
+pint to actually check them against the server.
 
 ```
 export TOKEN=$(op read op://tales-secrets/grafana-prom-metrics-check-token/TOKEN)
 export GRAFANA=https://borgmon.local.symmatree.com
-mkdir -p /tmp/rules
-extract.py "--grafana-token=$TOKEN" "--grafana-url=$GRAFANA" --out-dir=/tmp/rules
+export OUT_DIR=/tmp/rules
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
+python extract.py "--grafana-token=$TOKEN" "--grafana-url=$GRAFANA" "--out-dir=$OUT_DIR"
+pint -s -c ../tales/.pint.hcl -w 30 lint -n info "${OUT_DIR}"
 ```
 
 This script first collects data:
@@ -59,9 +70,4 @@ spec:
       expr: second-target-expression
 ```
 
-## Secrets
-
-The tools expect to connect to Grafana with a service account
-token, and mimir without auth (but with an address). The
-connection info is stored in 1Password and the `.secrets`
-folder.
+We can then run `pint` against that output or a subset of it.
