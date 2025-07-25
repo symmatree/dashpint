@@ -28,7 +28,7 @@ def add_exprs_for_panel(panel, templateVars, exprs):
     Extracts query expressions from a panel's targets.
     Returns a list of expressions.
     """
-    logging.info("Searching panel: %s", panel)
+    logging.debug("Searching panel: %s", panel)
     for target in panel.get("targets", []):
         expr = target.get("expr")
         if expr:
@@ -44,17 +44,23 @@ def exprs_for_dashboard(dash_json) -> list[str]:
     exprs = []
     templateVars = {"$__rate_interval": "1m", "$__interval": "1m", "$__interval_ms": "60000"}
     for v in dash_json["spec"]["templating"]["list"]:
-        if v['type'] == "datasource":
+        if ('type' in v) and v['type'] == "datasource":
             continue
+        if 'name' not in v:
+            logging.warning("Skipping template variable without name: %s", v)
+            continue
+        name = v['name']
         vals = v.get('current', {}).get('value', [])
-        val = v['name']
+        val = name
         if vals:
             val = vals[0]
-        if v['name'] == 'cluster':
+        if name == 'cluster':
+            # TODO: Configurable
             val = 'tales'
-        if v['name'] == 'namespace' and val == '$__all':
+        if name == 'namespace' and val == '$__all':
+            # TODO: Use source namespace somehow
             val = 'cilium'
-        templateVars["$" + v['name']] = val
+        templateVars["$" + name] = val
     for panel in panels:
         add_exprs_for_panel(panel, templateVars, exprs)
     return exprs
