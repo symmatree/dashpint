@@ -34,6 +34,7 @@ def add_exprs_for_panel(panel, templateVars, exprs):
         if expr:
             for v in templateVars:
                 expr = expr.replace(v, templateVars[v])
+            expr = expr.replace("\n", " ")
             exprs.append(expr)
     for panel in panel.get("panels", []):
         add_exprs_for_panel(panel, templateVars, exprs)
