@@ -23,7 +23,7 @@ import os
 import yaml
 import re
 
-def add_exprs_for_panel(panel, templateVars, exprs):
+def add_exprs_for_panel(panel, templateVars: dict[str, str], dropVars: list[str], exprs):
     """
     Extracts query expressions from a panel's targets.
     Returns a list of expressions.
@@ -32,18 +32,26 @@ def add_exprs_for_panel(panel, templateVars, exprs):
     for target in panel.get("targets", []):
         expr = target.get("expr")
         if expr:
+            expr = expr.replace("\n", " ")
+            for v in dropVars:
+                expr = expr.replace(f'{v}="${v}"', "")
+                expr = expr.replace(f'{v}=~"${v}"', "")
+            expr = re.sub(r',\s*,', ',', expr)
+            expr = re.sub(r'\s+', ' ', expr)
+            expr = re.sub(r'{\s*,+', '{ ', expr)
+            expr = expr.replace(", }", " }")
             for v in templateVars:
                 expr = expr.replace(v, templateVars[v])
-            expr = expr.replace("\n", " ")
             exprs.append(expr)
     for panel in panel.get("panels", []):
-        add_exprs_for_panel(panel, templateVars, exprs)
+        add_exprs_for_panel(panel, templateVars, dropVars=dropVars, exprs=exprs)
 
 def exprs_for_dashboard(dash_json) -> list[str]:
     # logging.info("Dashboard keys: %s", dash_json.keys())
     panels = dash_json["spec"].get("panels", [])
     exprs = []
     templateVars = {"$__rate_interval": "1m", "$__interval": "1m", "$__interval_ms": "60000"}
+    dropVars = ["instance", "namespace", "pod", "cluster"]
     for v in dash_json["spec"]["templating"]["list"]:
         if ('type' in v) and v['type'] == "datasource":
             continue
@@ -55,15 +63,9 @@ def exprs_for_dashboard(dash_json) -> list[str]:
         val = name
         if vals:
             val = vals[0]
-        if name == 'cluster':
-            # TODO: Configurable
-            val = 'tales'
-        if name == 'namespace' and val == '$__all':
-            # TODO: Use source namespace somehow
-            val = 'cilium'
-        templateVars["$" + name] = val
+            templateVars["$" + name] = val
     for panel in panels:
-        add_exprs_for_panel(panel, templateVars, exprs)
+        add_exprs_for_panel(panel, templateVars, dropVars, exprs)
     return exprs
 
 
@@ -144,8 +146,8 @@ def main():
                 continue
             dashboards_data[folder_title][dash_title] = exprs_for_dashboard(dash_json)
 
-    print("Dashboards data collected:")
-    print(dashboards_data)
+    # print("Dashboards data collected:")
+    # print(dashboards_data)
 
     def sanitize_name(name):
         return re.sub(r'[^A-Za-z0-9]+', '-', name)
@@ -173,7 +175,7 @@ def main():
                 }
             }
             with open(out_path, "w") as f:
-                yaml.safe_dump(yaml_data, f, sort_keys=False)
+                yaml.safe_dump(yaml_data, f, default_style='\"', width=4096, sort_keys=False)
             logging.info(f"Wrote {out_path}")
 
 if __name__ == "__main__":
